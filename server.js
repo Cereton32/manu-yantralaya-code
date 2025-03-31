@@ -439,7 +439,7 @@ app.get('/api/breakdowns/single/:id', async (req, res) => {
     }
   });
 
-  app.get('/api/files/:filename', (req, res) => {
+  app.get('/api/files/uploads/:filename', (req, res) => {
     const filename = req.params.filename;
     const filePath = path.join(__dirname, 'uploads', filename);
   
