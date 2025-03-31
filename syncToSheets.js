@@ -24,6 +24,7 @@ async function syncAllToSheets() {
       'Open Timestamp': bd.timestamps.open.toISOString(),
       'Machine ID': bd.openForm.machineId,
       'Machine Family': bd.openForm.machineFamily,
+      'breakdownType': bd.openForm.breakdownType,
       'Production Stopped': bd.openForm.productionStopped ? 'Yes' : 'No',
       'Problem Description': bd.openForm.problemDescription,
       'Problem Media': bd.openForm.mediaUrl || '',
