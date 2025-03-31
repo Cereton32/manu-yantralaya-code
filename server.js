@@ -457,5 +457,15 @@ app.get('/api/breakdowns/single/:id', async (req, res) => {
       res.status(404).json({ error: 'File not found' });
     }
   });
+
+  // Add to server.js
+app.get('/api/breakdowns', authenticateAdmin, async (req, res) => {
+  try {
+    const breakdowns = await Breakdown.find();
+    res.json(breakdowns);
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
