@@ -1,6 +1,6 @@
 // authMiddleware.js
 const approvedAdminList = require('./approved_admin_list');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const authenticateAdmin = async (req, res, next) => {
   try {
