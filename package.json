@@ -4,7 +4,7 @@
     "main": "server.js",
     "scripts": {
         "start": "node server.js",
-        "preinstall": "npm rebuild bcrypt --build-from-source",
+        "preinstall": "npm rebuild bcrypt --build-from-source"
     },
     "dependencies": {
         "bcrpyt": "^2.0.0",
