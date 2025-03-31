@@ -1,6 +1,5 @@
 // authMiddleware.js
 const approvedAdminList = require('./approved_admin_list');
-const bcrypt = require('bcryptjs');
 
 const authenticateAdmin = async (req, res, next) => {
   try {
@@ -29,12 +28,8 @@ const authenticateAdmin = async (req, res, next) => {
       });
     }
 
-    // Compare passwords (use bcrypt.compare in production)
-    // For now using simple comparison - replace with hashed passwords in production
-    const passwordMatch = admin.password === password;
-    // In production: const passwordMatch = await bcrypt.compare(password, admin.password);
-
-    if (!passwordMatch) {
+    // Simple password comparison (for testing)
+    if (admin.password !== password) {
       return res.status(403).json({ 
         success: false, 
         error: 'Invalid admin credentials' 
