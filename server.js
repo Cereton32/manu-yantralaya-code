@@ -8,7 +8,7 @@ const { syncAllToSheets } = require('./syncToSheets');
 const Breakdown = require('./models/Breakdown');
 const fs = require('fs')
 const { authenticateAdmin } = require('./authMiddleware');
-const approvedAdminList = require('./approved_admin_list');
+
 const app = express();
 app.use(cors({
     origin: 'http://localhost', // Or your Flutter app's origin
