@@ -11,9 +11,9 @@ const { authenticateAdmin } = require('./authMiddleware');
 
 const app = express();
 app.use(cors({
-    origin: 'http://localhost', // Or your Flutter app's origin
+    origin: 'http://localhost',
     methods: ['POST', 'GET', 'PUT']
-  }));
+}));
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
@@ -32,10 +32,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Breakdown Schema
-
-
-
+// Date Formatting Utility
+function formatDate(date) {
+  if (!date) return null;
+  return new Date(date).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+}
 
 // Generate Breakdown ID
 function generateId() {
@@ -51,49 +60,50 @@ app.post('/api/breakdowns/open', upload.single('media'), async (req, res) => {
       openForm: {
         machineId: req.body.machineId,
         machineFamily: req.body.machineFamily,
-        breakdownType:req.body.breakdownType,
+        breakdownType: req.body.breakdownType,
         productionStopped: req.body.productionStopped === 'true',
         problemDescription: req.body.problemDescription,
         mediaUrl: req.file ? `/uploads/${req.file.filename}` : null
+      },
+      timestamps: {
+        open: new Date()
       }
     });
     
     await breakdown.save();
     await syncAllToSheets();
-    res.json({ breakdownId: breakdown.breakdownId });
+    res.json({ 
+      breakdownId: breakdown.breakdownId,
+      createdAt: formatDate(breakdown.createdAt)
+    });
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
 
-// Add this near the top of your server file (after your other constants)
 const APPROVED_MAINTENANCE_IDS = [
   'MNT-2023-001',
   'MNT-2023-002',
   'MNT-2023-003',
-  // Add more approved maintenance IDs as needed
 ];
 
 const APPROVED_CLOSURE_IDS = [
   'CLS-2023-001',
   'CLS-2023-002',
   'CLS-2023-003',
-  // Add more approved closure IDs as needed
 ];
 
 const APPROVED_APPROVAL_IDS = [
   'APPR-2023-001',
   'APPR-2023-002',
   'APPR-2023-003',
-  // Add more approved approval IDs as needed
 ];
 
-// approved_admin_list.js
 const approvedAdminList = [
   {
     adminId: "ADMIN-001",
     username: "superadmin",
-    password: "$2b$10$EXAMPLEHASHEDPASSWORD", // Hashed password in production
+    password: "$2b$10$EXAMPLEHASHEDPASSWORD",
     fullName: "Super Admin",
     role: "superadmin",
     isActive: true
@@ -106,15 +116,8 @@ const approvedAdminList = [
     role: "maintenance",
     isActive: true
   }
-  // Add more admins as needed
 ];
-// Then modify your routes to include validation:
-// In your main server file (e.g., server.js or app.js)
 
-// Add these endpoints to your existing server.js file
-
-// Admin-only endpoint to edit complete breakdown
-// Add this endpoint for full breakdown deletion
 app.delete('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) => {
   try {
     const breakdownId = req.params.id;
@@ -127,7 +130,6 @@ app.delete('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res)
       });
     }
 
-    // Delete all associated media files
     const mediaFields = [
       breakdown.openForm?.mediaUrl,
       breakdown.closureForm?.mediaUrl
@@ -142,13 +144,13 @@ app.delete('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res)
       }
     });
 
-    // Delete from database
     await Breakdown.deleteOne({ breakdownId });
     await syncAllToSheets();
     
     res.json({
       success: true,
-      message: "Full breakdown deleted successfully"
+      message: "Full breakdown deleted successfully",
+      deletedAt: formatDate(new Date())
     });
   } catch (err) {
     res.status(500).json({
@@ -158,14 +160,11 @@ app.delete('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res)
   }
 });
 
-// Update the edit endpoint to handle all forms
-// Admin Edit Endpoint with Partial Updates
 app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) => {
   try {
       const breakdownId = req.params.id;
       const updateData = {};
       
-      // Open Form Fields
       if (req.body.machineId) updateData['openForm.machineId'] = req.body.machineId;
       if (req.body.machineFamily) updateData['openForm.machineFamily'] = req.body.machineFamily;
       if (req.body.problemDescription) updateData['openForm.problemDescription'] = req.body.problemDescription;
@@ -173,20 +172,16 @@ app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) =>
           updateData['openForm.productionStopped'] = req.body.productionStopped === 'true';
       }
 
-      // Temporary Form Fields
       if (req.body.temporaryMaintenanceId) updateData['temporaryForm.maintenanceId'] = req.body.temporaryMaintenanceId;
       if (req.body.temporaryCorrectiveAction) updateData['temporaryForm.correctiveAction'] = req.body.temporaryCorrectiveAction;
       if (req.body.temporarySpareUsed) updateData['temporaryForm.spareUsed'] = req.body.temporarySpareUsed;
 
-      // Closure Form Fields
       if (req.body.closureMaintenanceId) updateData['closureForm.maintenanceId'] = req.body.closureMaintenanceId;
       if (req.body.closureAnalysisReport) updateData['closureForm.analysisReport'] = req.body.closureAnalysisReport;
 
-      // Approval Form Fields
       if (req.body.approvalId) updateData['approvalForm.approvalId'] = req.body.approvalId;
       if (req.body.approvalStatus) updateData['approvalForm.status'] = req.body.approvalStatus;
 
-      // Update timestamps only for fields that are being updated
       if (req.body.temporaryMaintenanceId) updateData['timestamps.temporary'] = new Date();
       if (req.body.closureMaintenanceId) updateData['timestamps.closure'] = new Date();
       if (req.body.approvalId) updateData['timestamps.approval'] = new Date();
@@ -204,9 +199,21 @@ app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) =>
           });
       }
 
+      const formattedBreakdown = {
+        ...breakdown.toObject(),
+        createdAt: formatDate(breakdown.createdAt),
+        updatedAt: formatDate(breakdown.updatedAt),
+        timestamps: {
+          open: formatDate(breakdown.timestamps?.open),
+          temporary: formatDate(breakdown.timestamps?.temporary),
+          closure: formatDate(breakdown.timestamps?.closure),
+          approval: formatDate(breakdown.timestamps?.approval)
+        }
+      };
+
       res.json({
           success: true,
-          breakdown,
+          breakdown: formattedBreakdown,
           message: "Breakdown updated successfully"
       });
   } catch (err) {
@@ -216,7 +223,7 @@ app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) =>
       });
   }
 });
-// Admin verification endpoint
+
 app.post('/api/admin/verify', authenticateAdmin, (req, res) => {
   try {
     const { adminId } = req.body;
@@ -245,7 +252,8 @@ app.post('/api/admin/verify', authenticateAdmin, (req, res) => {
       admin: {
         adminId: req.admin.adminId,
         username: req.admin.username,
-        role: req.admin.role
+        role: req.admin.role,
+        lastLogin: formatDate(new Date())
       }
     });
   } catch (error) {
@@ -256,18 +264,17 @@ app.post('/api/admin/verify', authenticateAdmin, (req, res) => {
   }
 });
 
-// Protected admin-only endpoint example
 app.get('/api/admin/dashboard', authenticateAdmin, (req, res) => {
   res.json({
     success: true,
     message: `Welcome to admin dashboard, ${req.admin.username}`,
-    adminInfo: req.admin
+    adminInfo: req.admin,
+    serverTime: formatDate(new Date())
   });
 });
 
 app.put('/api/breakdowns/:id/temporary', async (req, res) => {
   try {
-    // Validate maintenance ID
     if (!APPROVED_MAINTENANCE_IDS.includes(req.body.maintenanceId)) {
       return res.status(400).json({
         success: false,
@@ -283,7 +290,7 @@ app.put('/api/breakdowns/:id/temporary', async (req, res) => {
           maintenanceId: req.body.maintenanceId,
           correctiveAction: req.body.correctiveAction,
           spareUsed: req.body.spareUsed,
-          isApproved: true // Mark as approved since we validated the ID
+          isApproved: true
         }
       },
       { new: true }
@@ -297,9 +304,22 @@ app.put('/api/breakdowns/:id/temporary', async (req, res) => {
     }
     
     await syncAllToSheets();
+    
+    const formattedBreakdown = {
+      ...breakdown.toObject(),
+      createdAt: formatDate(breakdown.createdAt),
+      updatedAt: formatDate(breakdown.updatedAt),
+      timestamps: {
+        open: formatDate(breakdown.timestamps?.open),
+        temporary: formatDate(breakdown.timestamps?.temporary),
+        closure: formatDate(breakdown.timestamps?.closure),
+        approval: formatDate(breakdown.timestamps?.approval)
+      }
+    };
+    
     res.json({
       success: true,
-      breakdown,
+      breakdown: formattedBreakdown,
       message: "Temporary report submitted successfully"
     });
   } catch (err) {
@@ -312,7 +332,6 @@ app.put('/api/breakdowns/:id/temporary', async (req, res) => {
 
 app.put('/api/breakdowns/:id/closure', upload.single('media'), async (req, res) => {
   try {
-    // Validate closure maintenance ID
     if (!APPROVED_CLOSURE_IDS.includes(req.body.maintenanceId)) {
       return res.status(400).json({
         success: false,
@@ -332,7 +351,7 @@ app.put('/api/breakdowns/:id/closure', upload.single('media'), async (req, res) 
           maintenanceId: req.body.maintenanceId,
           analysisReport: req.body.analysisReport,
           mediaUrl: req.file ? `/uploads/${req.file.filename}` : null,
-          isApproved: true // Mark as approved since we validated the ID
+          isApproved: true
         }
       },
       { new: true }
@@ -346,9 +365,22 @@ app.put('/api/breakdowns/:id/closure', upload.single('media'), async (req, res) 
     }
     
     await syncAllToSheets();
+    
+    const formattedBreakdown = {
+      ...breakdown.toObject(),
+      createdAt: formatDate(breakdown.createdAt),
+      updatedAt: formatDate(breakdown.updatedAt),
+      timestamps: {
+        open: formatDate(breakdown.timestamps?.open),
+        temporary: formatDate(breakdown.timestamps?.temporary),
+        closure: formatDate(breakdown.timestamps?.closure),
+        approval: formatDate(breakdown.timestamps?.approval)
+      }
+    };
+    
     res.json({
       success: true,
-      breakdown,
+      breakdown: formattedBreakdown,
       message: "Closure report submitted successfully"
     });
   } catch (err) {
@@ -361,7 +393,6 @@ app.put('/api/breakdowns/:id/closure', upload.single('media'), async (req, res) 
 
 app.put('/api/breakdowns/:id/approval', async (req, res) => {
   try {
-    // Validate approval ID
     if (!APPROVED_APPROVAL_IDS.includes(req.body.approvalId)) {
       return res.status(400).json({
         success: false,
@@ -380,7 +411,7 @@ app.put('/api/breakdowns/:id/approval', async (req, res) => {
         'approvalForm': {
           approvalId: req.body.approvalId,
           status: req.body.status,
-          isApproved: true // Mark as approved since we validated the ID
+          isApproved: true
         }
       },
       { new: true }
@@ -394,9 +425,22 @@ app.put('/api/breakdowns/:id/approval', async (req, res) => {
     }
     
     await syncAllToSheets();
+    
+    const formattedBreakdown = {
+      ...breakdown.toObject(),
+      createdAt: formatDate(breakdown.createdAt),
+      updatedAt: formatDate(breakdown.updatedAt),
+      timestamps: {
+        open: formatDate(breakdown.timestamps?.open),
+        temporary: formatDate(breakdown.timestamps?.temporary),
+        closure: formatDate(breakdown.timestamps?.closure),
+        approval: formatDate(breakdown.timestamps?.approval)
+      }
+    };
+    
     res.json({
       success: true,
-      breakdown,
+      breakdown: formattedBreakdown,
       message: "Approval submitted successfully"
     });
   } catch (err) {
@@ -406,60 +450,96 @@ app.put('/api/breakdowns/:id/approval', async (req, res) => {
     });
   }
 });
+
 app.get('/api/breakdowns/:userId', async (req, res) => {
   try {
     const breakdowns = await Breakdown.find({ userId: req.params.userId });
-    res.json(breakdowns);
+    
+    const formattedBreakdowns = breakdowns.map(bd => ({
+      ...bd.toObject(),
+      createdAt: formatDate(bd.createdAt),
+      updatedAt: formatDate(bd.updatedAt),
+      timestamps: {
+        open: formatDate(bd.timestamps?.open),
+        temporary: formatDate(bd.timestamps?.temporary),
+        closure: formatDate(bd.timestamps?.closure),
+        approval: formatDate(bd.timestamps?.approval)
+      }
+    }));
+    
+    res.json(formattedBreakdowns);
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
+
 app.get('/api/breakdowns/single/:id', async (req, res) => {
-    try {
-      console.log(`Fetching breakdown: ${req.params.id}`);
-      const breakdown = await Breakdown.findOne({ breakdownId: req.params.id });
-      
-      if (!breakdown) {
-        return res.status(404).json({
-          success: false,
-          error: "Breakdown not found"
-        });
-      }
-      
-      res.json({ 
-        success: true,
-        breakdown 
-      });
-    } catch (err) {
-      console.error('Error fetching breakdown:', err);
-      res.status(500).json({ 
+  try {
+    const breakdown = await Breakdown.findOne({ breakdownId: req.params.id });
+    
+    if (!breakdown) {
+      return res.status(404).json({
         success: false,
-        error: 'Failed to fetch breakdown' 
+        error: "Breakdown not found"
       });
     }
-  });
+    
+    const formattedBreakdown = {
+      ...breakdown.toObject(),
+      createdAt: formatDate(breakdown.createdAt),
+      updatedAt: formatDate(breakdown.updatedAt),
+      timestamps: {
+        open: formatDate(breakdown.timestamps?.open),
+        temporary: formatDate(breakdown.timestamps?.temporary),
+        closure: formatDate(breakdown.timestamps?.closure),
+        approval: formatDate(breakdown.timestamps?.approval)
+      }
+    };
+    
+    res.json({ 
+      success: true,
+      breakdown: formattedBreakdown
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch breakdown' 
+    });
+  }
+});
 
-  app.get('/api/files/uploads/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const filePath = path.join(__dirname, 'uploads', filename);
-  
-    // Check if file exists
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({ error: 'File not found' });
-    }
-  });
+app.get('/api/files/uploads/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, 'uploads', filename);
 
-  // Add to server.js
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'File not found' });
+  }
+});
+
 app.get('/api/breakdowns', authenticateAdmin, async (req, res) => {
   try {
     const breakdowns = await Breakdown.find();
-    res.json(breakdowns);
+    
+    const formattedBreakdowns = breakdowns.map(bd => ({
+      ...bd.toObject(),
+      createdAt: formatDate(bd.createdAt),
+      updatedAt: formatDate(bd.updatedAt),
+      timestamps: {
+        open: formatDate(bd.timestamps?.open),
+        temporary: formatDate(bd.timestamps?.temporary),
+        closure: formatDate(bd.timestamps?.closure),
+        approval: formatDate(bd.timestamps?.approval)
+      }
+    }));
+    
+    res.json(formattedBreakdowns);
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT} at ${formatDate(new Date())}`));
