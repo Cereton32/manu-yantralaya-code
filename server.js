@@ -114,49 +114,12 @@ const approvedAdminList = [
 // Add these endpoints to your existing server.js file
 
 // Admin-only endpoint to edit complete breakdown
-app.put('/api/admin/breakdowns/:id', authenticateAdmin, upload.single('media'), async (req, res) => {
+// Add this endpoint for full breakdown deletion
+app.delete('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) => {
   try {
     const breakdownId = req.params.id;
-    const updateData = {
-      'openForm.machineId': req.body.machineId,
-      'openForm.machineFamily': req.body.machineFamily,
-      'openForm.breakdownType': req.body.breakdownType,
-      'openForm.productionStopped': req.body.productionStopped === 'true',
-      'openForm.problemDescription': req.body.problemDescription,
-      ...(req.file && { 'openForm.mediaUrl': `/uploads/${req.file.filename}` })
-    };
-
-    // Update temporary form if provided
-    if (req.body.maintenanceId) {
-      updateData['temporaryForm.maintenanceId'] = req.body.maintenanceId;
-      updateData['temporaryForm.correctiveAction'] = req.body.correctiveAction;
-      updateData['temporaryForm.spareUsed'] = req.body.spareUsed;
-      updateData['timestamps.temporary'] = new Date();
-    }
-
-    // Update closure form if provided
-    if (req.body.closureMaintenanceId) {
-      updateData['closureForm.maintenanceId'] = req.body.closureMaintenanceId;
-      updateData['closureForm.analysisReport'] = req.body.analysisReport;
-      updateData['timestamps.closure'] = new Date();
-      if (req.file) {
-        updateData['closureForm.mediaUrl'] = `/uploads/${req.file.filename}`;
-      }
-    }
-
-    // Update approval form if provided
-    if (req.body.approvalId) {
-      updateData['approvalForm.approvalId'] = req.body.approvalId;
-      updateData['approvalForm.status'] = req.body.status;
-      updateData['timestamps.approval'] = new Date();
-    }
-
-    const breakdown = await Breakdown.findOneAndUpdate(
-      { breakdownId: breakdownId },
-      updateData,
-      { new: true }
-    );
-
+    const breakdown = await Breakdown.findOne({ breakdownId });
+    
     if (!breakdown) {
       return res.status(404).json({
         success: false,
@@ -164,11 +127,28 @@ app.put('/api/admin/breakdowns/:id', authenticateAdmin, upload.single('media'), 
       });
     }
 
+    // Delete all associated media files
+    const mediaFields = [
+      breakdown.openForm?.mediaUrl,
+      breakdown.closureForm?.mediaUrl
+    ];
+
+    mediaFields.forEach(url => {
+      if (url) {
+        const filePath = path.join(__dirname, url);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+    });
+
+    // Delete from database
+    await Breakdown.deleteOne({ breakdownId });
     await syncAllToSheets();
+    
     res.json({
       success: true,
-      breakdown,
-      message: "Breakdown updated successfully"
+      message: "Full breakdown deleted successfully"
     });
   } catch (err) {
     res.status(500).json({
@@ -178,49 +158,62 @@ app.put('/api/admin/breakdowns/:id', authenticateAdmin, upload.single('media'), 
   }
 });
 
-// Admin-only endpoint to delete breakdown
-app.delete('/api/admin/breakdowns/:id', authenticateAdmin, async (req, res) => {
+// Update the edit endpoint to handle all forms
+// Admin Edit Endpoint with Partial Updates
+app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) => {
   try {
-    const breakdownId = req.params.id;
-    
-    // First find the breakdown to get media URLs
-    const breakdown = await Breakdown.findOne({ breakdownId: breakdownId });
-    
-    if (!breakdown) {
-      return res.status(404).json({
-        success: false,
-        error: "Breakdown not found"
+      const breakdownId = req.params.id;
+      const updateData = {};
+      
+      // Open Form Fields
+      if (req.body.machineId) updateData['openForm.machineId'] = req.body.machineId;
+      if (req.body.machineFamily) updateData['openForm.machineFamily'] = req.body.machineFamily;
+      if (req.body.problemDescription) updateData['openForm.problemDescription'] = req.body.problemDescription;
+      if (req.body.productionStopped !== undefined) {
+          updateData['openForm.productionStopped'] = req.body.productionStopped === 'true';
+      }
+
+      // Temporary Form Fields
+      if (req.body.temporaryMaintenanceId) updateData['temporaryForm.maintenanceId'] = req.body.temporaryMaintenanceId;
+      if (req.body.temporaryCorrectiveAction) updateData['temporaryForm.correctiveAction'] = req.body.temporaryCorrectiveAction;
+      if (req.body.temporarySpareUsed) updateData['temporaryForm.spareUsed'] = req.body.temporarySpareUsed;
+
+      // Closure Form Fields
+      if (req.body.closureMaintenanceId) updateData['closureForm.maintenanceId'] = req.body.closureMaintenanceId;
+      if (req.body.closureAnalysisReport) updateData['closureForm.analysisReport'] = req.body.closureAnalysisReport;
+
+      // Approval Form Fields
+      if (req.body.approvalId) updateData['approvalForm.approvalId'] = req.body.approvalId;
+      if (req.body.approvalStatus) updateData['approvalForm.status'] = req.body.approvalStatus;
+
+      // Update timestamps only for fields that are being updated
+      if (req.body.temporaryMaintenanceId) updateData['timestamps.temporary'] = new Date();
+      if (req.body.closureMaintenanceId) updateData['timestamps.closure'] = new Date();
+      if (req.body.approvalId) updateData['timestamps.approval'] = new Date();
+
+      const breakdown = await Breakdown.findOneAndUpdate(
+          { breakdownId },
+          { $set: updateData },
+          { new: true }
+      );
+
+      if (!breakdown) {
+          return res.status(404).json({
+              success: false,
+              error: "Breakdown not found"
+          });
+      }
+
+      res.json({
+          success: true,
+          breakdown,
+          message: "Breakdown updated successfully"
       });
-    }
-
-    // Delete associated media files
-    if (breakdown.openForm?.mediaUrl) {
-      const filePath = path.join(__dirname, breakdown.openForm.mediaUrl);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-    
-    if (breakdown.closureForm?.mediaUrl) {
-      const filePath = path.join(__dirname, breakdown.closureForm.mediaUrl);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-
-    // Delete the breakdown from database
-    await Breakdown.deleteOne({ breakdownId: breakdownId });
-    
-    await syncAllToSheets();
-    res.json({
-      success: true,
-      message: "Breakdown deleted successfully"
-    });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+      res.status(500).json({
+          success: false,
+          error: err.message
+      });
   }
 });
 // Admin verification endpoint
@@ -467,5 +460,6 @@ app.get('/api/breakdowns', authenticateAdmin, async (req, res) => {
     res.status(500).send(err.message);
   }
 });
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
