@@ -12,9 +12,10 @@ const BreakdownSchema = new mongoose.Schema({
   openForm: {
     machineId: String,
     machineFamily: String,
+    breakdownType:String,
     productionStopped: Boolean,
     problemDescription: String,
-    BreakdownType:String,
+   
     mediaUrl: String
   },
   temporaryForm: {
