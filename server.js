@@ -50,7 +50,15 @@ function formatDate(date) {
 function generateId() {
   return 'BD-' + Date.now().toString(36).toUpperCase();
 }
-
+// Add this temporary test route to your server
+app.get('/test-sheet', async (req, res) => {
+  try {
+    await syncAllToSheets();
+    res.send('Sync completed - check server logs');
+  } catch (err) {
+    res.status(500).send('Sync failed: ' + err.message);
+  }
+});
 // API Endpoints
 app.post('/api/breakdowns/open', upload.single('media'), async (req, res) => {
   try {
