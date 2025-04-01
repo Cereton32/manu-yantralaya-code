@@ -14,6 +14,7 @@ const BreakdownSchema = new mongoose.Schema({
     machineFamily: String,
     productionStopped: Boolean,
     problemDescription: String,
+    BreakdownType:String,
     mediaUrl: String
   },
   temporaryForm: {

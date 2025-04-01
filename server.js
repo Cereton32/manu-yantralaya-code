@@ -167,6 +167,7 @@ app.put('/api/admin/breakdowns/full/:id', authenticateAdmin, async (req, res) =>
       
       if (req.body.machineId) updateData['openForm.machineId'] = req.body.machineId;
       if (req.body.machineFamily) updateData['openForm.machineFamily'] = req.body.machineFamily;
+      if (req.body.breakdownType) updateData['openForm.breakdownType'] = req.body.breakdownType;
       if (req.body.problemDescription) updateData['openForm.problemDescription'] = req.body.problemDescription;
       if (req.body.productionStopped !== undefined) {
           updateData['openForm.productionStopped'] = req.body.productionStopped === 'true';
